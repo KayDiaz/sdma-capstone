@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
 import authRoutes from "./routes/authRoutes.js";
+import authMiddleware from "./middleware/authMiddleware.js";
+import roleMiddleware from "./middleware/roleMiddleware.js";
+import violationRoutes from './routes/violationRoutes.js';
 
 dotenv.config();
 
@@ -11,10 +14,40 @@ app.use(express.json());
 app.use(cors());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/violations", violationRoutes);
 
-// TEST ROUTE
-app.get("/", (req, res) => {
-  res.send("SDMA Backend is running");
+app.get(
+  "/admin",
+  authMiddleware,
+  roleMiddleware("admin"),
+  (req, res) => {
+    res.json({ message: "Welcome Admin"});
+  }
+);
+
+app.get(
+  "/student",
+  authMiddleware,
+  roleMiddleware("student"),
+  (req, res) => {
+    res.json({ message: "Welcome Student"});
+  }
+);
+
+app.get(
+  "/professor",
+  authMiddleware,
+  roleMiddleware("professor"),
+  (req, res) => {
+    res.json({ message: "Welcome Professor"});
+  }
+);
+
+app.get("/protected", authMiddleware, (req, res) => {
+  res.json({
+    message: "You are authorized",
+    user: req.user,
+  });
 });
 
 mongoose
