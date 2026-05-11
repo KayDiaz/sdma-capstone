@@ -5,6 +5,13 @@ import authRoutes from "./routes/authRoutes.js";
 import authMiddleware from "./middleware/authMiddleware.js";
 import roleMiddleware from "./middleware/roleMiddleware.js";
 import violationRoutes from './routes/violationRoutes.js';
+import usersRoutes from './routes/usersRoutes.js';
+import violationsCatalogRoutes from './routes/violationsCatalogRoutes.js';
+import communitySessionsRoutes from './routes/communitySessionsRoutes.js';
+import logsRoutes from './routes/logsRoutes.js';
+import professorsRoutes from './routes/professorsRoutes.js';
+import studentsRoutes from './routes/studentsRoutes.js';
+import adminsRoutes from './routes/adminsRoutes.js';
 
 const app = express();
 app.use(express.json());
@@ -12,6 +19,13 @@ app.use(cors());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/violations", violationRoutes);
+app.use("/api/users", usersRoutes);
+app.use("/api/violations/catalog", violationsCatalogRoutes);
+app.use("/api/community-sessions", communitySessionsRoutes);
+app.use("/api/logs", logsRoutes);
+app.use("/api/professors", professorsRoutes);
+app.use("/api/students", studentsRoutes);
+app.use("/api/admins", adminsRoutes);
 
 app.get(
   "/admin",

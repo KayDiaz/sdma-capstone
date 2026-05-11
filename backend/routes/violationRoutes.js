@@ -15,7 +15,7 @@ router.post(
       const { student, violationType, description } = req.body;
 
       const { data: violation, error } = await supabase
-        .from("violations")
+        .from("violation_record")
         .insert({
           student,
           violationType,
@@ -44,7 +44,7 @@ router.get(
   async (req, res) => {
     try {
       const { data: violations, error } = await supabase
-        .from("violations")
+        .from("violation_record")
         .select("*, student:student(fullName,email), reportedBy:reportedBy(fullName,role)")
         .order("created_at", { ascending: false });
 
@@ -67,7 +67,7 @@ router.get(
   async (req, res) => {
     try {
       const { data: violations, error } = await supabase
-        .from("violations")
+        .from("violation_record")
         .select("*")
         .eq("student", req.user.id)
         .order("created_at", { ascending: false });
@@ -93,7 +93,7 @@ router.put(
       const { severity, punishment, communityServiceHours, status } = req.body;
 
       const { data: violation, error } = await supabase
-        .from("violations")
+        .from("violation_record")
         .update({
           severity,
           punishment,

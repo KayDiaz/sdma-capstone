@@ -24,7 +24,6 @@ router.post("/register", async (req, res) => {
                 fullName,
                 email,
                 role,
-                studentId,
                 department,
             })
             .select()

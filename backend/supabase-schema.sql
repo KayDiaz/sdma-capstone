@@ -11,7 +11,7 @@ create table if not exists public.users (
   created_at timestamptz not null default now()
 );
 
-create table if not exists public.violations (
+create table if not exists public.violation_record (
   id uuid primary key default gen_random_uuid(),
   student uuid not null references public.users(id) on delete cascade,
   "reportedBy" uuid not null references public.users(id) on delete cascade,
