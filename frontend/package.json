@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "expo": "^55.0.20",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.10",
+    "typescript": "~5.9.2"
+  }
+}
