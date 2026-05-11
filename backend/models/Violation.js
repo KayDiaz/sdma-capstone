@@ -1,52 +1,57 @@
-import mongoose from "mongoose";
+import supabase from "../config/supabaseClient.js";
 
-const violationSchema = new mongoose.Schema({
-    student: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-        },
-
-    reportedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+const Violations = {
+    async create(payload) {
+        const { data, error } = await supabase
+            .from("violations")
+            .insert(payload)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
     },
 
-    violationType: {
-        type: String,
-        required: true,
+    async getAll() {
+        const { data, error } = await supabase
+            .from("violations")
+            .select("*, student:student(fullName,email), reportedBy:reportedBy(fullName,role)")
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data;
     },
 
-    description: {
-        type: String,
-        required: true,
+    async getById(id) {
+        const { data, error } = await supabase.from("violations").select("*").eq("id", id).single();
+        if (error) throw error;
+        return data;
     },
 
-    severity: {
-        type:String,
-        enum: ["minor", "major", "critical"],
-        default: "minor",
+    async getByStudent(studentId) {
+        const { data, error } = await supabase
+            .from("violations")
+            .select("*")
+            .eq("student", studentId)
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data;
     },
 
-    punishment: {
-        type: String,
-        default: "",
+    async update(id, updates) {
+        const { data, error } = await supabase
+            .from("violations")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
     },
 
-    communityServiceHours:{
-        type:Number,
-        default: 0,
+    async remove(id) {
+        const { data, error } = await supabase.from("violations").delete().eq("id", id).select().single();
+        if (error) throw error;
+        return data;
     },
+};
 
-    status:{
-        type: String,
-        enum: ["pending", "assigned", "completed"],
-        default: "pending",
-    },
-}
-);
-
-const Violation = mongoose.model("Violation", violationSchema);
-
-export default Violation;
+export default Violations;

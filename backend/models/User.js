@@ -1,42 +1,44 @@
-import mongoose from "mongoose";
+import supabase from "../config/supabaseClient.js";
 
-const userSchema = new mongoose.Schema(
-    {
-        fullName: {
-            type: String,
-            required: true,
-        },
-        
-        email: {
-            type: String,
-            required: true,
-            unique: true,
-        },
-
-        password:{
-            type: String,
-            required: true,
-        },
-
-        role:{
-            type: String,
-            enum: ["admin", "professor", "student"],
-            required: true,
-        },
-
-        studentId: {
-            type: String,
-        },
-
-        department: {
-            type: String,
-        },
+const Users = {
+    async getById(id) {
+        const { data, error } = await supabase.from("users").select("*").eq("id", id).single();
+        if (error) throw error;
+        return data;
     },
-    {
-        timestamps: true,
-    }
-);
 
-const User = mongoose.model("User", userSchema);
+    async getByEmail(email) {
+        const { data, error } = await supabase.from("users").select("*").eq("email", email).single();
+        if (error) throw error;
+        return data;
+    },
 
-export default User;
+    async create(profile) {
+        const { data, error } = await supabase
+            .from("users")
+            .insert(profile)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    async update(id, updates) {
+        const { data, error } = await supabase
+            .from("users")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        return data;
+    },
+
+    async remove(id) {
+        const { data, error } = await supabase.from("users").delete().eq("id", id).select().single();
+        if (error) throw error;
+        return data;
+    },
+};
+
+export default Users;
