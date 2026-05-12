@@ -55,6 +55,29 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// Partial update (PATCH) - alias to PUT
+router.patch("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user.id !== id && req.user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+    const updates = req.body;
+    const updated = await Users.update(id, updates);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Create user (admin) - creates profile row; authentication/credentials managed via /auth/register
+router.post("/", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const created = await Users.create(req.body);
+    res.status(201).json(created);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete user (admin)
 router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {

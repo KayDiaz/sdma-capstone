@@ -35,6 +35,26 @@ router.put("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => 
   }
 });
 
+// Get session by id (admin)
+router.get("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const item = await CommunitySessions.getById(req.params.id);
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Partial update (PATCH)
+router.patch("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const updated = await CommunitySessions.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete session (admin)
 router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {

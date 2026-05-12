@@ -1,5 +1,6 @@
 import express from "express";
 import supabase from "../config/supabaseClient.js";
+import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
@@ -8,12 +9,24 @@ router.post("/register", async (req, res) => {
     try {
         const { fullName, email, password, role, studentId, department } = req.body;
 
+        // Basic server-side validation for required fields
+        const required = ["fullName", "email", "password", "role"];
+        const missing = required.filter((k) => !req.body[k]);
+        if (missing.length) {
+            return res.status(400).json({ message: `Missing required fields: ${missing.join(", ")}` });
+        }
+
+    
+
+        // Normalize department value
+        const dept = typeof department === "string" ? department.trim() : department;
+
 
         // 1. Create the user in Supabase Auth using admin API to avoid confirmation email
         const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
             email,
             password,
-            user_metadata: { fullName, role, studentId, department },
+            user_metadata: { fullName, role, studentId, department: dept },
             email_confirm: true,
         });
 
@@ -30,7 +43,7 @@ router.post("/register", async (req, res) => {
                     fullName,
                     email,
                     role,
-                    department,
+                    department: dept,
                 })
                 .select();
 
@@ -86,7 +99,30 @@ router.post("/login", async (req, res) => {
         if (profileError) throw profileError;
 
         if (!profiles || profiles.length === 0) {
-            return res.status(404).json({ message: "No user profile found for this account" });
+            // Fallback: if no profile row exists (RLS or missing insert), use auth user metadata
+            const authUser = authData.user ?? authData;
+            const fallbackProfile = {
+                id: authUser.id,
+                fullName: authUser.user_metadata?.fullName ?? null,
+                email: authUser.email ?? email,
+                role: authUser.user_metadata?.role ?? null,
+                department: authUser.user_metadata?.department ?? null,
+                note: "profile taken from auth.user_metadata due to missing users row",
+            };
+
+            // Issue app JWT and return fallback profile
+            const appTokenFallback = jwt.sign(
+                { id: fallbackProfile.id, email: fallbackProfile.email, role: fallbackProfile.role },
+                process.env.JWT_SECRET,
+                { expiresIn: "1h" }
+            );
+
+            return res.status(200).json({
+                message: "Login successful (profile from auth metadata)",
+                token: appTokenFallback,
+                supabaseToken: authData.session?.access_token,
+                user: fallbackProfile,
+            });
         }
 
         if (profiles.length > 1) {
@@ -96,10 +132,18 @@ router.post("/login", async (req, res) => {
 
         const userProfile = profiles[0];
 
-        // Return the session token (access_token) and user data
+        // Create an application JWT (signed with our JWT_SECRET) for middleware/auth checks
+        const appToken = jwt.sign(
+            { id: userProfile.id, email: userProfile.email, role: userProfile.role },
+            process.env.JWT_SECRET,
+            { expiresIn: "1h" }
+        );
+
+        // Return the app JWT plus the Supabase access token (optional)
         res.status(200).json({
             message: "Login successful",
-            token: authData.session?.access_token, // Supabase's built-in JWT
+            token: appToken, // your app JWT for `authMiddleware`
+            supabaseToken: authData.session?.access_token, // optional: keep if you need Supabase features
             user: userProfile,
         });
     } catch (error) {

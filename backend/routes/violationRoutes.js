@@ -115,4 +115,55 @@ router.put(
   }
 );
 
+// Get violation by id (admin, reporter, or student involved)
+router.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data: violation, error } = await supabase
+      .from("violation_record")
+      .select("*, student:student(fullName,email), reportedBy:reportedBy(fullName,role)")
+      .eq("id", id)
+      .single();
+
+    if (error) throw error;
+
+    // allow admin, reporter, or the student themselves
+    if (req.user.role !== "admin" && req.user.id !== violation.reportedBy?.id && req.user.id !== violation.student)
+      return res.status(403).json({ message: "Forbidden" });
+
+    res.json(violation);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Partial update (PATCH) - admin only
+router.patch("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const updates = req.body;
+    const { data: violation, error } = await supabase
+      .from("violation_record")
+      .update(updates)
+      .eq("id", req.params.id)
+      .select("*")
+      .single();
+
+    if (error) throw error;
+    res.json(violation);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Delete violation (admin)
+router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const { data, error } = await supabase.from("violation_record").delete().eq("id", req.params.id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 export default router;

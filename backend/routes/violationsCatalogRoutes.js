@@ -35,6 +35,26 @@ router.put("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => 
   }
 });
 
+// Admin: partial update (PATCH)
+router.patch("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
+  try {
+    const updated = await ViolationsCatalog.update(req.params.id, req.body);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Public: get catalog item by id
+router.get("/:id", authMiddleware, async (req, res) => {
+  try {
+    const item = await ViolationsCatalog.getById(req.params.id);
+    res.json(item);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Admin: delete
 router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {

@@ -42,6 +42,18 @@ router.put("/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// Partial update (PATCH)
+router.patch("/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (req.user.id !== id && req.user.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+    const updated = await Users.update(id, req.body);
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Delete professor (admin)
 router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) => {
   try {
