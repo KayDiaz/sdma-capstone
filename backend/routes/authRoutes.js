@@ -21,6 +21,17 @@ router.post("/register", async (req, res) => {
         // Normalize department value
         const dept = typeof department === "string" ? department.trim() : department;
 
+        // Normalize role values (accept common variants)
+        const normalizeRole = (r) => {
+            if (!r) return r;
+            const lowered = String(r).toLowerCase();
+            if (lowered === "prof" || lowered === "teacher") return "professor";
+            if (lowered === "admin" || lowered === "administrator") return "admin";
+            if (lowered === "student" || lowered === "stud") return "student";
+            return lowered;
+        };
+        const normalizedRole = normalizeRole(role);
+
 
         // 1. Create the user in Supabase Auth using admin API to avoid confirmation email
         const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
@@ -32,36 +43,38 @@ router.post("/register", async (req, res) => {
 
         if (adminError) return res.status(400).json({ message: adminError.message });
 
-        // 2. Insert the profile data into your public.users table (link by the created user's id)
+        // 2. Ensure the profile row exists in your public.users table (link by the created user's id)
         const userId = adminData.user?.id ?? adminData.id;
         let userProfile = null;
         try {
-            const insert = await supabase
+            // use upsert to create or update the users row reliably
+            const { data: upserted, error: upsertErr } = await supabase
                 .from("users")
-                .insert({
+                .upsert({
                     id: userId, // Link to the Auth user
                     fullName,
                     email,
-                    role,
+                    role: normalizedRole,
                     department: dept,
-                })
-                .select();
+                    studentId,
+                }, { onConflict: "id" })
+                .select()
+                .single();
 
-            // If insert returns an array (no .single), use first element
-            if (insert.error) throw insert.error;
-            userProfile = Array.isArray(insert.data) ? insert.data[0] : insert.data;
+            if (upsertErr) throw upsertErr;
+            userProfile = upserted;
         } catch (dbErr) {
-            // Handle Row-Level Security blocking inserts in development Supabase projects
-            console.warn("Failed to insert profile row into users table:", dbErr.message || dbErr);
+            // Handle Row-Level Security blocking inserts or other DB errors
+            console.warn("Failed to upsert profile row into users table:", dbErr.message || dbErr);
             // Fallback: use the auth user's metadata as the profile
             const authUser = adminData.user ?? adminData;
             userProfile = {
                 id: userId,
                 fullName: authUser.user_metadata?.fullName ?? fullName,
                 email: authUser.email ?? email,
-                role: authUser.user_metadata?.role ?? role,
+                role: authUser.user_metadata?.role ?? normalizedRole,
                 department: authUser.user_metadata?.department ?? department,
-                note: "profile stored in auth.user_metadata due to RLS on users table",
+                note: "profile taken from auth.user_metadata due to DB insert failure",
             };
         }
 
