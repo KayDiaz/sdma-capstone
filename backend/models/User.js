@@ -35,7 +35,11 @@ const Users = {
     },
 
     async remove(id) {
-        const { data, error } = await supabase.from("users").delete().eq("id", id).select().single();
+        const { data, error } = await supabase
+        .from("users")
+        .delete()
+        .eq("id", id)
+        .select();
         if (error) throw error;
         return data;
     },

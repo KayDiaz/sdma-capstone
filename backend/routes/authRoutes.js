@@ -4,24 +4,32 @@ import jwt from "jsonwebtoken";
 
 const router = express.Router();
 
-// REGISTER ROUTE
+
+// REGISTER
 router.post("/register", async (req, res) => {
     try {
-        const { fullName, email, password, role, studentId, department } = req.body;
+        // 1. Extract and Normalize Input
+        const full_name = req.body?.full_name ?? null;
+        const email = req.body?.email ?? null;
+        const password = req.body?.password ?? null;
+        const role = req.body?.role ?? null;
+        const student_id = req.body?.student_id ?? null;
+        const department = req.body?.department ?? req.body?.dept ?? null;
 
-        // Basic server-side validation for required fields
-        const required = ["fullName", "email", "password", "role"];
-        const missing = required.filter((k) => !req.body[k]);
-        if (missing.length) {
-            return res.status(400).json({ message: `Missing required fields: ${missing.join(", ")}` });
+        // 2. Initial Validation
+        const requiredMissing = [];
+        if (!full_name) requiredMissing.push("full_name");
+        if (!email) requiredMissing.push("email");
+        if (!password) requiredMissing.push("password");
+        if (!role) requiredMissing.push("role");
+        
+        if (requiredMissing.length) {
+            return res.status(400).json({ 
+                message: `Missing required fields: ${requiredMissing.join(", ")}` 
+            });
         }
 
-    
-
-        // Normalize department value
-        const dept = typeof department === "string" ? department.trim() : department;
-
-        // Normalize role values (accept common variants)
+        // Normalize role values
         const normalizeRole = (r) => {
             if (!r) return r;
             const lowered = String(r).toLowerCase();
@@ -32,49 +40,79 @@ router.post("/register", async (req, res) => {
         };
         const normalizedRole = normalizeRole(role);
 
+        // --- THE "GHOST USER" FIX ---
+        // Check for student_id BEFORE hitting Supabase Auth and validate format only for students
+        if (normalizedRole === "student") {
+            if (!student_id) {
+                return res.status(400).json({
+                    message: "student_id is required when role is 'student'",
+                });
+            }
 
-        // 1. Create the user in Supabase Auth using admin API to avoid confirmation email
+            const studentIdRegex = /^\d{2}-\d{5}-\d{3}$/;
+            if (!studentIdRegex.test(student_id)) {
+                return res.status(400).json({
+                    message: "Invalid Student ID format. Expected format: 00-00000-000",
+                });
+            }
+        }
+
+        const dept = typeof department === "string" ? department.trim() : department;
+
+        // 3. Create the user in Supabase Auth
+        // Using admin API so the account is auto-confirmed
         const { data: adminData, error: adminError } = await supabase.auth.admin.createUser({
             email,
             password,
-            user_metadata: { fullName, role, studentId, department: dept },
+            user_metadata: { full_name, role: normalizedRole, student_id, department: dept },
             email_confirm: true,
         });
 
         if (adminError) return res.status(400).json({ message: adminError.message });
 
-        // 2. Ensure the profile row exists in your public.users table (link by the created user's id)
         const userId = adminData.user?.id ?? adminData.id;
         let userProfile = null;
+
+        // 4. Create/Sync the Profile in public.users
         try {
-            // use upsert to create or update the users row reliably
+            const payload = {
+                id: userId,
+                full_name,
+                email,
+                role: normalizedRole,
+                department: dept,
+                // If you have a student_id column in public.users, add it here:
+                // student_id: student_id 
+            };
+
             const { data: upserted, error: upsertErr } = await supabase
                 .from("users")
-                .upsert({
-                    id: userId, // Link to the Auth user
-                    fullName,
-                    email,
-                    role: normalizedRole,
-                    department: dept,
-                    studentId,
-                }, { onConflict: "id" })
+                .upsert(payload, { onConflict: "id" })
                 .select()
                 .single();
 
             if (upsertErr) throw upsertErr;
-            userProfile = upserted;
+
+            userProfile = {
+                id: upserted.id,
+                fullName: upserted.full_name,
+                email: upserted.email,
+                role: upserted.role,
+                department: upserted.department,
+                createdAt: upserted.created_at,
+                updatedAt: upserted.updated_at,
+            };
         } catch (dbErr) {
-            // Handle Row-Level Security blocking inserts or other DB errors
-            console.warn("Failed to upsert profile row into users table:", dbErr.message || dbErr);
-            // Fallback: use the auth user's metadata as the profile
+            console.warn("DB Sync Failed:", dbErr.message);
+            // Fallback to Auth metadata if DB insert fails (e.g., RLS issues)
             const authUser = adminData.user ?? adminData;
             userProfile = {
                 id: userId,
-                fullName: authUser.user_metadata?.fullName ?? fullName,
+                fullName: authUser.user_metadata?.full_name ?? full_name,
                 email: authUser.email ?? email,
                 role: authUser.user_metadata?.role ?? normalizedRole,
-                department: authUser.user_metadata?.department ?? department,
-                note: "profile taken from auth.user_metadata due to DB insert failure",
+                department: authUser.user_metadata?.department ?? dept,
+                note: "Profile synced from Auth metadata (DB entry failed)",
             };
         }
 
@@ -82,16 +120,18 @@ router.post("/register", async (req, res) => {
             message: "User registered successfully",
             user: userProfile,
         });
+
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
 });
 
-// LOGIN ROUTE
+// LOGIN
 router.post("/login", async (req, res) => {
     try {
         const { email, password } = req.body;
 
+        if (!email || !password) return res.status(400).json({ message: "Missing email or password" });
 
         // 1. Log in via Supabase Auth
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -102,8 +142,6 @@ router.post("/login", async (req, res) => {
         if (authError) return res.status(400).json({ message: authError.message });
 
         // 2. Fetch the extra profile data from your public.users table
-        console.log("authData from signInWithPassword:", authData);
-
         const { data: profiles, error: profileError } = await supabase
             .from("users")
             .select("*")
@@ -116,14 +154,13 @@ router.post("/login", async (req, res) => {
             const authUser = authData.user ?? authData;
             const fallbackProfile = {
                 id: authUser.id,
-                fullName: authUser.user_metadata?.fullName ?? null,
+                fullName: authUser.user_metadata?.full_name ?? null,
                 email: authUser.email ?? email,
                 role: authUser.user_metadata?.role ?? null,
                 department: authUser.user_metadata?.department ?? null,
                 note: "profile taken from auth.user_metadata due to missing users row",
             };
 
-            // Issue app JWT and return fallback profile
             const appTokenFallback = jwt.sign(
                 { id: fallbackProfile.id, email: fallbackProfile.email, role: fallbackProfile.role },
                 process.env.JWT_SECRET,
@@ -139,25 +176,33 @@ router.post("/login", async (req, res) => {
         }
 
         if (profiles.length > 1) {
-            // Defensive: multiple rows found for the same id — surface for debugging
             return res.status(500).json({ message: "Multiple user profiles found for this id", count: profiles.length, profiles });
         }
 
         const userProfile = profiles[0];
 
-        // Create an application JWT (signed with our JWT_SECRET) for middleware/auth checks
+        // Map DB snake_case fields to camelCase for the API response
+        const mappedUser = {
+            id: userProfile.id,
+            fullName: userProfile.full_name ?? userProfile.fullName,
+            email: userProfile.email,
+            role: userProfile.role,
+            department: userProfile.department,
+            createdAt: userProfile.created_at,
+            updatedAt: userProfile.updated_at,
+        };
+
         const appToken = jwt.sign(
-            { id: userProfile.id, email: userProfile.email, role: userProfile.role },
+            { id: mappedUser.id, email: mappedUser.email, role: mappedUser.role },
             process.env.JWT_SECRET,
             { expiresIn: "1h" }
         );
 
-        // Return the app JWT plus the Supabase access token (optional)
         res.status(200).json({
             message: "Login successful",
-            token: appToken, // your app JWT for `authMiddleware`
-            supabaseToken: authData.session?.access_token, // optional: keep if you need Supabase features
-            user: userProfile,
+            token: appToken,
+            supabaseToken: authData.session?.access_token,
+            user: mappedUser,
         });
     } catch (error) {
         res.status(500).json({ message: error.message });

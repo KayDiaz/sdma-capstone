@@ -59,7 +59,14 @@ router.delete("/:id", authMiddleware, roleMiddleware("admin"), async (req, res) 
   try {
     const { id } = req.params;
     const deleted = await Users.remove(id);
+
+    res.status(200).json({ 
+      success: true,
+      message: `Professor with ID ${id} has been successfully deleted.` 
+    });
+
     res.json(deleted);
+    
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
